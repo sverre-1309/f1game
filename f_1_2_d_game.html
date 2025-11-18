@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Formula 1 – Botsing Game Over</title>
+<style>
+  body { margin:0; background:#222; color:white; font-family:Arial; display:flex; justify-content:center; align-items:center; height:100vh; }
+  canvas { background:#444; border:3px solid #888; display:block; }
+  #gameOver {
+    position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);
+    text-align:center; font-size:30px; display:none; color:red;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="600" height="800"></canvas>
+<div id="gameOver">GAME OVER<br><button onclick="restartGame()">Opnieuw</button></div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let keys = {};
+let money = 0;
+let score = 0;
+let gameRunning = true;
+
+// Track
+const track = { x: 100, width: 400, laneColor:"#555" };
+
+// Speler auto
+let player = {
+  x: canvas.width/2,
+  y: canvas.height - 150,
+  width:40,
+  height:80,
+  color:"#FF0000",
+  speed:5,
+  maxSpeed:10,
+  accel:0.2,
+  friction:0.05
+};
+
+// Weg lijnen
+let lines = [];
+for(let i=0;i<20;i++) lines.push({x:canvas.width/2, y:i*50, width:10, height:30});
+
+// Obstakel auto's
+let obstacles = [];
+function spawnObstacle() {
+  let x = Math.random()*(track.width - 40) + track.x + 20;
+  obstacles.push({x:x, y:-100, width:40, height:80, speed:3 + Math.random()*2, color:"#0F0"});
+  if(gameRunning) setTimeout(spawnObstacle, 2000);
+}
+spawnObstacle();
+
+// Power-ups
+let powerUps = [];
+function spawnPowerUp() {
+  let x = Math.random()*(track.width -30) + track.x + 15;
+  powerUps.push({x:x, y:-30, radius:15, color:"yellow", value:5});
+  if(gameRunning) setTimeout(spawnPowerUp, 5000);
+}
+spawnPowerUp();
+
+// Besturing
+document.addEventListener('keydown', e=>keys[e.key]=true);
+document.addEventListener('keyup', e=>keys[e.key]=false);
+
+// Botsing detectie
+function isColliding(a,b){
+  return !(a.x + a.width < b.x || a.x > b.x + b.width || a.y + a.height < b.y || a.y > b.y + b.height);
+}
+
+// Auto tekenen
+function drawCar(car){
+  ctx.save();
+  ctx.translate(car.x, car.y);
+  ctx.fillStyle = car.color;
+  ctx.beginPath();
+  ctx.moveTo(0,-car.height/2);
+  ctx.lineTo(-car.width/2,car.height/2);
+  ctx.lineTo(car.width/2,car.height/2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// Power-ups tekenen
+function drawPowerUp(pu){
+  ctx.fillStyle = pu.color;
+  ctx.beginPath();
+  ctx.arc(pu.x, pu.y, pu.radius, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle="#000";
+  ctx.font="12px Arial";
+  ctx.fillText("$"+pu.value, pu.x-8, pu.y+4);
+}
+
+// Weg lijnen tekenen
+function drawLines(){
+  ctx.fillStyle="white";
+  lines.forEach(l=>{
+    ctx.fillRect(l.x-l.width/2, l.y, l.width, l.height);
+    l.y += player.speed;
+    if(l.y > canvas.height) l.y = -l.height;
+  });
+}
+
+// Snelheidsmeter
+function drawSpeedometer(){
+  ctx.fillStyle="white";
+  ctx.font="20px Arial";
+  ctx.fillText("Snelheid: "+Math.round(player.speed*10)+" km/u", 10, 60);
+}
+
+// Game Over
+function gameOver(){
+  gameRunning = false;
+  document.getElementById('gameOver').style.display = "block";
+}
+
+// Herstart spel
+function restartGame(){
+  document.getElementById('gameOver').style.display = "none";
+  player.x = canvas.width/2;
+  player.y = canvas.height - 150;
+  player.speed = 5;
+  obstacles = [];
+  powerUps = [];
+  score = 0;
+  money = 0;
+  gameRunning = true;
+  spawnObstacle();
+  spawnPowerUp();
+  requestAnimationFrame(gameLoop);
+}
+
+// Spel loop
+function gameLoop(){
+  if(!gameRunning) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Track
+  ctx.fillStyle = track.laneColor;
+  ctx.fillRect(track.x,0,track.width,canvas.height);
+
+  drawLines();
+
+  // Speler beweging
+  if(keys['ArrowLeft'] && player.x - player.width/2 > track.x) player.x -= player.speed;
+  if(keys['ArrowRight'] && player.x + player.width/2 < track.x + track.width) player.x += player.speed;
+
+  // Constante vooruit snelheid
+  player.speed += player.accel;
+  player.speed *= (1 - player.friction);
+  if(player.speed > player.maxSpeed) player.speed = player.maxSpeed;
+  if(player.speed < 3) player.speed = 3;
+
+  drawCar(player);
+
+  // Obstakel auto's
+  for(let i=obstacles.length-1;i>=0;i--){
+    let obs = obstacles[i];
+    obs.y += obs.speed;
+    drawCar(obs);
+    if(isColliding(player, obs)){
+      gameOver(); // botsing = kapot
+    }
+    if(obs.y > canvas.height) obstacles.splice(i,1);
+  }
+
+  // Power-ups
+  for(let i=powerUps.length-1;i>=0;i--){
+    let pu = powerUps[i];
+    pu.y += player.speed;
+    drawPowerUp(pu);
+    if(isColliding({x:player.x-player.width/2,y:player.y-player.height/2,width:player.width,height:player.height},
+                    {x:pu.x-pu.radius,y:pu.y-pu.radius,width:pu.radius*2,height:pu.radius*2})){
+      money += pu.value;
+      score += pu.value;
+      powerUps.splice(i,1);
+    } else if(pu.y > canvas.height + pu.radius) powerUps.splice(i,1);
+  }
+
+  // Score en geld
+  ctx.fillStyle="white";
+  ctx.font="20px Arial";
+  ctx.fillText("Score: "+score,10,30);
+  ctx.fillText("Geld: $"+money,10,90);
+
+  drawSpeedometer();
+
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
